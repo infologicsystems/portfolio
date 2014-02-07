@@ -1,0 +1,90 @@
+.\"	PROTOTYPE MANUAL ENTRY
+.\"	Delete these comment lines and change <.*> as needed.
+.\"	See man(7) for a listing of nroff/troff macros.
+.\"	See /usr/man/man1/???.1i for examples.
+.\"	See $UW_VLSI_TOOLS/man/man1/*.1i for examples.
+.\"
+.\"	All text following a \" is treated as a comment.
+.\"	These may be deleted.
+.\"
+.\"	Make SURE the .TH command is the very first line of any
+.\"	man file you create!
+.\"
+.TH <commandName> <manSection> <releaseDate>
+.\"	The manSection, if originated with us, should have ".VLSI"
+.\"	appended, e.g. "1.VLSI" for ordinary section 1 pages, or
+.\"	"1G.VLSI" for generator man pages.
+
+.SH NAME
+<commandName> \- <abstract>
+.\"
+.\"	The abstract should be VERY brief (one line).
+
+.SH SYNOPSIS
+.B <commandName>
+.RB [ <options> ]
+.I <arguments>
+.\"
+.\"	If options exist, <options> should be:	\-xyz
+
+.SH DESCRIPTION
+.\"
+.\"	Italicize occurances of the command being described and any
+.\"	other command that has manuals in existance.
+.\"
+.\"	Italicize occurances of arguments to the command being described.
+.\"
+.\"	Boldface occurances of file extensions (.xyz), options (\-x)
+.\"	and other similar entities.
+.\"
+.\"	Use  .LP  for new paragraphs.
+.\"
+.\"	Use  .IP  for option, parameter, etc. descriptions
+.\"
+
+.SH FILES
+.\"
+.\"	List the files used and produced by the program here.
+.\"	Use  .br  to separate them.
+.\"
+.\"	If there is some basename that is a part of the filename,
+.\"	use the  .RI  or  .IR  to put the basename in Italics:
+.\"
+.\"		.RI path/ basename .xyz
+.\"		.IR basename .xyz
+.\"
+.\"	This causes alternate arguments to be Roman or Italics, and
+.\"	concatenates them together.
+.\"
+
+.SH "SEE ALSO"
+.\"
+.\" <related commands>
+.\" .br
+.\" <related documentation>
+.\"
+
+.SH AUTHOR
+.\" DingleFritz FluffDuffer (XYZ, Inc.)
+.\"
+.\"	If the author is unknown but the company or university is,
+.\"	put that in parentheses:
+.\"
+.\" (Northwest Laboratory of Integrated Systems, University of Washington)
+.\"
+
+.SH MODIFICATIONS
+.\"
+.\"	Same as for AUTHOR.
+.\"
+
+.SH DIAGNOSTICS
+.\"
+.\"	Error messages, exit codes, etc.
+.\"
+
+.SH BUGS
+.\"
+.\"	Bugs in the algorithm, bugs in the user interface,
+.\"	shortcomings of all shapes and sizes, etc.
+.\"

@@ -1,0 +1,29 @@
+# %W% %G%
+# File: Makefile
+# Last Modification: yy/mm/dd
+# Author: Michael Moscovitch
+# Description:
+# Project:
+# History:
+#
+include $(MK)localpaths.mk
+
+INSTALL=install
+INSTBINFLAGS=-m 755
+INSTLIBFLAGS=-m 644
+INSTDIRFLAGS=-d -m 755
+INSTMANFLAGS=-m 644
+
+BINDIR=$(ALOCAL)/bin
+MANDIR=$(LOCAL)/share/man/man1
+
+all:
+
+install:
+
+clean:
+
+depend:
+
+FORCE:
+

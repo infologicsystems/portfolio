@@ -1,0 +1,32 @@
+.TH TEMPLATE N "Day Monthname Year"
+.UC 4
+.SH NAME
+routinename1, routinename2 - routines to do something
+.SH SYNOPSIS
+.nf
+.ft B
+type routine1(arg1,arg2)
+type1 arg1;
+type2 arg2;
+.PP
+.ft B
+type routine2(args)
+type args;
+.PP
+.fi
+.SH DESCRIPTION
+These routines allow you to do \fIsomething\fP. 
+.SH RETURN VALUE
+These routines return values.
+.SH ERRORS
+If used incorrectly, these can cause errors:
+.TP 15
+[EFUNNY]
+You gave ridiculous arguments.
+.TP 15
+[EPERM]
+You tried to do something you're not allowed to do.
+.SH NOTES
+C sharp, D, E flat.
+.SH AUTHOR
+der Mouse (Mike Parker), December, 1984.
