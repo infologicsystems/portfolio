@@ -1,0 +1,768 @@
+#!/usr/local/bin/perl
+ eval "exec /usr/local/bin/perl -S $0 $*"
+    if $running_under_some_shell;
+			# this emulates #! processing on NIH machines.
+			# (remove #! line above if indigestible)
+
+#eval '$'.$1.'$2;' while $ARGV[0] =~ /^([A-Za-z_]+=)(.*)/ && shift;
+			# process any FOO=bar switches
+# %W% %G%
+# File: strmsg
+# Last Modification: 94/03/20
+# Author: Michael Moscovitch
+# Copyright: (c) 1994 Michael Moscovitch
+# Description: Parse C code and extract strings
+# Project:
+# History:
+#
+# Ver	Date
+# 0.0	94/03/20	Michael Moscovitch
+#	Initial version
+# 0.1	94/03/21	Michael Moscovitc
+#	Modifies each program file
+#	Usage information
+#	Cleaned up command line interface
+# 0.2	94/04/01	Michael Moscovitch
+#	updated to xpg2
+#	updated usage info
+#	maintain same set/message number sequence for file.c and file.h
+#	updated function call inserted into program to take msgSet,msgNum
+#		and default message.
+#
+# 0.3	94/04/10	Michael Moscovitch
+#	changed default text macro suffix to Text
+#
+#
+# Features:
+#	Handles multi-line strings continued with '\'
+#	converts strings in define statements
+#	adds comments with original string value
+#	uses heuristics to determine suitability of string for extraction
+#	renames original program source file when modifying
+#	generates xpg2 compatible message file
+#	generates comments for enhanced gencat software
+#	uses different message sets for each module
+#
+# Limitations:
+#	Does not handle concatination of strings yet (ANSI)
+#	Does not understand the context in which the string is used
+#	No man page available yet
+#	Does not follow the current indentation of the program
+#	Can generate very long lines
+#	May extract strings that are better left in the program
+#
+&init();
+&strmsg'main();
+exit(0);
+
+sub init {
+    local($tmp,@perlpath,$home);
+    $[ = 0;			# set array base to 0
+#    $, = ' ';			# set output field separator
+#    $\ = "\n";			# set output record separator
+    $| = 1;			# force flush after every write
+
+    $ENV{'PATH'} = '/bin:/usr/bin';
+    $ENV{'SHELL'} = '/bin/sh' if $ENV{'SHELL'} ne '';
+    $ENV{'IFS'} = '' if $ENV{'IFS'} ne '';
+
+    $tmp=$ENV{'PERLPATH'};
+    if (defined($tmp)) {
+	@perlpath = split(':',$tmp,99);
+#	print "@perlpath\n";
+	@INC=(@INC,@perlpath);
+    }
+}
+
+package strmsg;
+
+sub main {
+	if ($#ARGV < $[) {
+		&usage();
+		exit 0;	
+	}
+	&defaults();
+	&argparse(@ARGV);
+
+	optloop: {
+		if ($flg_gen) {
+			&genCode($opt_outfile,$opts[0]);
+		} elsif ($flg_extract) {
+			&parsemain($opt_outfile,@opts);
+		}
+	}
+	exit(0);
+}
+
+
+sub defaults {
+	$true=1;
+	$false=0;
+	$verbose=$false;
+	$flg_debug = $false;
+	$flg_mod = $true;
+	$flg_gen = $false;
+	$flg_extract = $false;
+	$opt_outfile = "";
+	$opt_format = "xpg2";
+	@nfuncs = ("fopen","open","getenv","catopen","system","exec",
+		"HTSetPresentation","HTSetConversion","HTSetSuffix",
+		"HTAtom_for","HTStyleNamed");
+	$dquote = '"';
+	$logfile = "strmsg.log";
+	$def_msgfile = "messages.m";
+	$def_hdrfile = "messages";
+	$maxkeylen = 16;
+	$strmsg = "STRMSG";
+	$msgfilecomment = "#";
+	$msgkeyprefix = "MSG_";
+	$msgSetPrefix = "main";
+}
+
+# parse command line arguments
+sub argparse {
+	local(@arglist) = @_;
+	local($state) = "0";
+	local($dummy);
+	@opts = ();
+	foreach $arg (@arglist) {
+		#print $arg,"\n";
+		if ($state ne "0") {
+			if ($state eq "-o") { $opt_outfile=$arg; }
+			elsif ($state eq "-format") { $opt_format=$arg; }
+			$state="0";
+			next;
+		}
+		if ($arg eq "-v") { $verbose=$true; }
+		elsif ($arg eq "-o") { $state=$arg; }
+		elsif ($arg eq "-debug") { $flg_debug=$true; }
+		elsif ($arg eq "-n") { $flg_mod=$false; }
+		elsif ($arg eq "-gen") { $flg_gen=$true; }
+		elsif ($arg eq "-extract") { $flg_extract=$true; }
+		elsif ($arg eq "-format") { $state=$arg; }
+		else { @opts[$#opts + 1]=$arg; }
+	}
+}
+
+#
+
+sub usage {
+	printf("usage:\n");
+	printf(" strmsg -extract [-n] -o message_file filename.c ...\n");
+	printf(" strmsg -gen -o filename.h [message_file]\n");
+}
+
+sub parsemain {
+	local($msgfile,@filelist) = @_;
+	local(*OUTF1,*LOGFILE);
+	local(%msgSetDBcount,%msgSetDBset);
+	local($lastmsgset,$msgset,$msgcount);
+
+	if ($msgfile eq "") {
+		$msgfile = $def_msgfile;
+	}
+
+	&setup();
+
+
+	open(OUTF1,">$msgfile");
+
+	&fileHeader(*OUTF1);
+
+	$lastmsgset = 0;
+	open(LOGFILE,">$logfile");
+	foreach $name (@filelist) {
+		&newparse(*OUTF1,$name);
+		$msgSetDBcount{$msgSetName} = $msgcount;
+	}
+	close(LOGFILE);
+
+	&fileFooter(*OUTF1);
+
+	close(OUTF1);
+}
+
+#
+# generate header for message file
+#
+sub fileHeader {
+	local(*OUTF1) = @_;
+
+	printf(OUTF1 "%s\n",$msgfilecomment);
+	printf(OUTF1 "%s Filename: %s\n",$msgfilecomment,$msgfile);
+	printf(OUTF1 "%s Created by: The strmsg program\n",$msgfilecomment);
+	printf(OUTF1 "%s Description: String message file\n",$msgfilecomment);
+	printf(OUTF1 "%s Format: %s\n",$msgfilecomment,$opt_format);
+	printf(OUTF1 "%s\n",$msgfilecomment);
+	printf(OUTF1 "%s\n",$msgfilecomment);
+}
+
+#
+# generate footer for message file
+#
+sub fileFooter {
+	local(*OUTF1) = @_;
+
+	printf(OUTF1 "\n");
+	printf(OUTF1 "%s\n",$msgfilecomment);
+	printf(OUTF1 "%s end of file\n",$msgfilecomment);
+	printf(OUTF1 "%s\n",$msgfilecomment);
+}
+
+sub outputHeading {
+	local(*OUTF1,$filename) = @_;
+
+	printf(LOGFILE "File: %s\n",$filename);
+
+	printf(OUTF1 "\n");
+	printf(OUTF1 "%s\n",$msgfilecomment);
+	printf(OUTF1 "%s Module: %s\n",$msgfilecomment,$filename);
+	printf(OUTF1 "%s\n",$msgfilecomment);
+	printf(OUTF1 "\n");
+	if ($opt_format eq "xpg2") {
+		&xpg2_outputHeading(*OUTF1,$filename);
+	} elsif ($opt_format eq "msgcat") {
+		&xpg2_outputHeading(*OUTF1,$filename);
+	}
+}
+
+# output message file heading
+sub xpg2_outputHeading {
+	local(*OUTF1,$filename) = @_;
+
+	printf(OUTF1 "%sset %d #%s\n",$msgfilecomment,$msgset,$msgSetName);
+	printf(OUTF1 "%squote %s\n",$msgfilecomment,$dquote);
+	printf(OUTF1 "\n");
+}
+
+sub parsec {
+	local(*OUTF1,$filename) = @_;
+
+	&outputHeading(*OUTF1,$filename);
+
+	open(INF1,$filename);
+
+	while (<INF1>) {
+		print $_;
+		if (/^#include/) {
+			next;
+		} elsif (/(\w*)\(([^()]*)\)/) {
+			$func = $1;
+			$param = $2;
+			if ($param =~ /"([^"]*)"/) {
+			$s = $1;
+			print("func = $func, param = $param, str = $s\n");
+			if (&isStrFunc($func)) {
+				$k = &genKeyFromString($s);
+				if ($k ne "") {
+					printf("%s\n","uimsg_msg($k)");
+					printf(OUTF1 "%-20s\t\"%s\"\n",$k,$s);
+				}
+			}
+			}
+		}
+	}
+	close(INF1);
+}
+
+sub newparse {
+	local(*OUTF1,$filename) = @_;
+	local($c,$l,$s,$v,$k,$state);
+	local($tmpfile,$ext);
+	local(*OUTCFILE);
+	local($indentlvl);
+
+	if ($verbose) {
+		printf(STDERR "Processing: %s\n",$filename);
+	}
+
+	&setMsgSet($filename);
+
+	&outputHeading(*OUTF1,$filename);
+
+	$indentlvl = 0;	# number of characters indent on current line
+
+	$ext = ".bak";
+	$tmpfile = "tmp$$.tmp";	# temp file name
+	open(OUTCFILE,">$tmpfile") if ($flg_mod);
+	open(INF1,$filename);
+
+	$state = 0;
+	$s = "";
+	$v = "";
+	while (<INF1>) {
+		chop;
+		$l = $_;
+		if ($state == 0 && /^#/ && ! /^#define/) {
+			# preprocessor directive, pass through unmodified
+			&writeProgFile($l);
+			next;
+		} elsif ($state == 0 && ! /\"|\//) {
+			# no quotes or comments, pass through unmodified
+			# note: this is only for performance enhancement
+			&writeProgFile($l);
+			next;
+		} else {
+			for ($i=0; $i < length($l); $i++) {
+				$c = substr($l,$i,1);
+				printf("%d %s\n",$state,$c) if $flg_debug;
+				if ($state == 1) {
+					if ($c eq "/") {
+						$state = 4;
+					} elsif ($c eq "*") {
+						$state = 2;
+					} else {
+					}
+					$s .= $c;
+				} elsif ($state == 2) {
+					if ($c eq "*") {
+						$state = 3;
+					} else {
+					}
+					$s .= $c;
+				} elsif ($state == 3) {
+					if ($c eq "/") {
+						$state = 0;
+					} else {
+						$state = 2;
+					}
+					$s .= $c;
+				} elsif ($state == 4) {
+					$s .= $c;
+				} elsif ($state == 5) {
+					# process string
+					if ($c eq "\\") {
+						$state = 6;
+						$v .= $c;
+					} elsif ($c eq "\"") {
+						$state = 0;
+						# end of string
+						$curLine = $s;
+						$s .= &processString($v);
+						$v = "";
+					} else {
+						$v .= $c;
+					}
+				} elsif ($state == 6) {
+					$state = 5;
+					$v .= $c;
+				} elsif ($state == 7) {
+					if ($c eq "'") {
+						$state = 0;
+					} elsif ($c eq "\\") {
+						$state = 8;
+					} else {
+					}
+					$s .= $c;
+				} elsif ($state == 8) {
+					$state = 7;
+					$s .= $c;
+				} else {
+					if ($c eq "/") {
+						$state = 1;
+						$s .= $c;
+					} elsif ($c eq "\"") {
+						$state = 5;
+						$v = "";
+					} elsif ($c eq "'") {
+						$state = 7;
+						$s .= $c;
+					} else {
+						$s .= $c;
+					}
+				}
+			}
+			if ($state == 4) {
+				$state = 0;
+				&writeProgFile($s);
+				$s = "";
+			} elsif ($state == 6) {
+				$v .= "\n";
+				$state = 5;
+			} elsif ($state == 5) {
+			} else {
+				&writeProgFile($s);
+				$s = "";
+			}
+		}
+	}
+	close(INF1);
+	if ($flg_mod) {
+		close(OUTCFILE);
+
+		rename($filename,"$filename$ext");	# backup orig file
+		rename($tmpfile,$filename);		# rename temp file
+	}
+}
+
+#
+#
+#
+sub writeProgFile {
+	local($s) = @_;
+	printf(OUTCFILE "%s\n",$s) if ($flg_mod);
+}
+
+#
+#
+#
+
+sub setMsgSet {
+	local($filename) = @_;
+
+	&setMessagePrefix($filename);
+
+	if (! defined($msgSetDBset{$msgSetName})) {
+		$lastmsgset++;
+		$msgSetDBcount{$msgSetName} = 1;
+		$msgSetDBset{$msgSetName} = $lastmsgset;
+	}
+	$msgcount = $msgSetDBcount{$msgSetName};
+	$msgset = $msgSetDBset{$msgSetName};
+}
+
+sub setMessagePrefix {
+	local($filename) = @_;
+	local($s);
+
+	$s = &basename(&pathTail($filename));
+	$msgSetPrefix = $s;
+	$msgSetName = $s;
+	$msgKeyPrefix = $s;
+	$msgItmPrefix = "";
+}
+
+sub basename {
+	local($path) = @_;
+
+	@f = split('\.',$path);
+	if ($#f > $[) {
+		return join('.',@f[$[ .. $#f -1]);
+	}
+	return $path;
+}
+
+sub pathTail {
+	local($path) = @_;
+	local(@s);
+
+	@s = &pathSplit($path);
+	return $s[$#s];
+}
+
+sub pathHead {
+	local($path) = @_;
+	local(@s);
+
+	@s = &pathSplit($path);
+	if ($#s > $[) {
+		return join('/',@s[$[ .. $#s - 1]);
+	}
+	return "";
+}
+
+sub pathSplit {
+	local($path) = @_;
+	local(@f);
+	@f = split('/',$path);
+	return @f;
+}
+
+#
+# generate unique key based on content of string value
+#
+sub genKeyFromString {
+	local($s) = @_;
+	local(@f,$k,$seq);
+
+
+	$s =~ s/\\n/ /g;
+	$s =~ s/%s/ /g;
+	$s =~ s/%d/ /g;
+	$s =~ s/%i/ /g;
+	$s =~ tr/!-@[-`//d;
+	$k = "";
+
+	$seq=0;
+	@f = split(' ',$s);
+	if ($s eq "" || $#f == $[ -1) {
+		return $k;
+	}
+	$k = $msgItmPrefix;
+	foreach $n (@f) {
+		$k .= &toupper(substr($n,0,1));
+	}
+
+	$k = substr($k,0,$maxkeylen);	# restrict max len of key
+
+	if (defined($keylist{$k})) {
+		$seq = $keylist{$k};
+		$seq++;
+		$keylist{$k} = $seq;
+		$k = $k . $seq;
+	}
+	$keylist{$k} = $seq;
+	return $k;
+}
+
+sub isStrFunc {
+	local($func) = @_;
+	$v = $functable{$func};
+	if (defined($v)) {
+		if ($v) {
+			return $false;
+		}
+	}
+	return $true;
+}
+
+sub setup {
+	foreach $n (@nfuncs) {
+		$functable{$n} = $true;
+	}
+	if ($opt_format eq "xpg2") {
+		$msgfilecomment = "$";
+	} elsif ($opt_format eq "msgcat") {
+		$msgfilecomment = "$";
+	} elsif ($opt_format eq "strmsg") {
+		$msgfilecomment = "#";
+	} else {
+		printf(STDERR "Unknown message file format %s\n",$opt_format);
+	}
+}
+
+sub toupper {
+	local($s) = @_;
+	$s =~ tr/a-z/A-Z/;
+	return $s;
+}
+
+#
+# return true if we find a function that should be ignored
+#
+sub isIgnoreFunc {
+	local($l) = @_;
+	foreach $f (@nfuncs) {
+		if ($l =~ /\b${f}\(/) {
+			return $true;
+		}
+	}
+	return $false;
+}
+
+#
+# evaluate string, return true if good candidate for extraction
+#
+sub evaluateString {
+	local($s) = @_;
+	local(@f);
+	local($wordcount,$charcount,$lettercount);
+	local($p,$wc,$ww,$wl);
+
+	if (&isIgnoreFunc($curLine)) {
+		return $false;
+	}
+
+	$wc = 0.05;	# weight for character count
+	$ww = 0.5;	# weight for word count
+	$wl = 0.1;	# weight for letter count
+
+	$charcount = length($s);
+
+	$s =~ s/\\n/ /g;
+	$s =~ s/%s/ /g;
+	$s =~ s/%d/ /g;
+	$s =~ s/%i/ /g;
+	$s =~ tr/!-@[-`//d;
+
+	@f = split(' ',$s);
+	$wordcount = $#f - $[ + 1;
+	$lettercount = $s =~ tr/A-Za-z//;
+	$p = $wordcount * $ww + $charcount * $wc + $lettercount * $wl;
+	if ($p < 1.0) {
+		return $false;
+	}
+	return $true;
+}
+
+sub writeStringToMessageFile {
+	local($k,$v) = @_;
+
+	if ($opt_format eq "xpg2") {
+		&xpg2_writeStringToMessageFile($k,$v);
+	} elsif ($opt_format eq "msgcat") {
+		&msgcat_writeStringToMessageFile($k,$v);
+	} else {
+		&old_writeStringToMessageFile($k,$v);
+	}
+}
+
+sub old_writeStringToMessageFile {
+	local($k,$v) = @_;
+	local($k2,$i,$v2);
+
+	$v2 = $v;
+	$k2 = $k;
+	$v2 =~ s/\\\n/\n/g;
+	foreach $i (split('\n',$v2)) {
+		printf(OUTF1 "%-20s\t\"%s\"\n",$k2,$i);
+		$k2 = "";
+	}
+}
+
+sub xpg2_writeStringToMessageFile {
+	local($k,$v) = @_;
+
+	printf(OUTF1 "%s #%s\n",$msgfilecomment,$k);
+	printf(OUTF1 "%d %s%s%s\n",$msgcount,$dquote,$v,$dquote);
+	$msgcount++;
+}
+
+sub msgcat_writeStringToMessageFile {
+	local($k,$v) = @_;
+
+	printf(OUTF1 "%s #%s\n",$msgfilecomment,$k);
+	printf(OUTF1 "# %s\n",$v);
+}
+
+sub strCall {
+	local($k) = @_;
+	return &xpg2_strCall($k);
+}
+
+sub xpg2_strCall {
+	local($k) = @_;
+	local($msgSet,$msgNum,$msgDef);
+	$msgSet = "${msgSetPrefix}Set";
+	$msgNum = "${msgKeyPrefix}${k}";
+	$msgDef = "${msgKeyPrefix}Text${k}";
+	return "${strmsg}($msgSet,$msgNum,$msgDef)";
+}
+
+sub old_strCall {
+	local($k) = @_;
+	$s = "${strmsg}($k)";
+	return $s;
+}
+
+sub strComment {
+	local($k,$v) = @_;
+	local($s);
+	$s = sprintf("/* %s = %s%s%s */","${msgKeyPrefix}${k}",
+		$dquote,$v,$dquote);
+	return $s;
+}
+
+sub processString {
+	local($v) = @_;
+	local($k,$s);
+
+	$s = "";
+	if (&evaluateString($v)) {
+		$k = &genKeyFromString($v);
+		if ($k ne "") {
+			&writeStringToMessageFile($k,$v);
+			printf(LOGFILE "Extract: %s%s%s\n",$dquote,$v,$dquote);
+			if ($flg_mod) {
+				printf(OUTCFILE "%s\n", &strComment($k,$v));
+				$s = &strCall($k);
+			}
+		}
+	} else {
+		printf(LOGFILE "Ignore: %s%s%s\n",$dquote,$v,$dquote);
+	}
+	if ($s eq "") {
+		$s = $dquote . $v . $dquote;
+	}
+	return $s;
+}
+
+
+sub genCode {
+	local($outfile,$msgfile) = @_;
+	local(*INFILE);
+	local($k,$v,$lang,%msgseq,%msgval,@msgord,$seq);
+	local($outprogfile,$outhdrfile);
+	if ($outfile eq "") {
+		$outfile = $def_hdrfile;
+	}
+	if ($msgfile eq "") {
+		$msgfile = $def_msgfile;
+	}
+	$lang = "english";
+	$seq = 0;
+	$outprogfile = "${outfile}.c";
+	$outhdrfile = "${outfile}.h";
+
+	# load message file
+	open(INFILE,$msgfile);
+	while (<INFILE>) {
+		if (/^\s*#/) {
+			# skip comments
+		} elsif (/^(\w+)\s*"(.*)"$/) {
+			$k = $1;
+			$v = $2;
+			if (defined($msgseq{$k})) {
+				$msgval{"$k-$lang"} = $v;
+			} else {
+				$msgord[$seq] = $k;
+				$msgseq{$k} = $seq;
+				$seq++;
+				$msgval{"$k-$lang"} = $v;
+			}
+		} elsif (/^\s*"(.*)"$/) {
+			# continuation string, concatinate
+			$v = $1;
+			if (defined($msgseq{$k})) {
+				$msgval{"$k-$lang"} .= "\\\n" . $v;
+			}
+		} else {
+		}
+	}
+	close(INFILE);
+
+	# write code file
+	open(OUTFILE,">$outprogfile");
+
+	printf(OUTFILE "/*-\n File: $outprogfile\n*/\n\n");
+	printf(OUTFILE "#include <stdio.h>\n");
+	printf(OUTFILE "#include <uimsg.h>\n\n");
+
+	printf(OUTFILE "/* global message object pointer */\n");
+	printf(OUTFILE "struct uimsgstruct *uimsg_global;\n");
+	# output string array
+	printf(OUTFILE "char *uimsg_str[] = {\n");
+
+	printf(OUTFILE "/* language = %s */\n",$lang);
+	foreach $k (@msgord) {
+		$v = $msgval{"$k-$lang"};
+		if (! defined($v)) {
+			$v = "UNDEFINED MESSAGE";
+		}
+		printf(OUTFILE "/* %s %s */\n",$k,$msgseq{$k});
+		printf(OUTFILE "%s%s%s,\n",$dquote,$v,$dquote);
+	}
+	printf(OUTFILE "};\n");
+
+	printf(OUTFILE "\n\n");
+	printf(OUTFILE "char *uimsg_lang[] = {\n");
+	printf(OUTFILE "};\n");
+
+	close(OUTFILE);
+
+	# write header file	
+	open(OUTFILE,">$outhdrfile");
+	printf(OUTFILE "/*-\n File: $outhdrfile\n*/\n\n");
+	printf(OUTFILE "#include <uimsg.h>\n\n");
+	printf(OUTFILE "extern struct uimsgstruct *uimsg_global;\n");
+	printf(OUTFILE "extern char **uimsg_str;\n");
+	printf(OUTFILE "extern char **uimsg_lang;\n");
+	printf(OUTFILE "#define %s(str) uimsg_msg(uimsg_global,str)\n\n",
+		$strmsg);
+	foreach $k (@msgord) {
+		printf(OUTFILE "#define %s %s\n",$k,$msgseq{$k});
+	}
+
+	close(OUTFILE);
+
+}
