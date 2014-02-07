@@ -1,0 +1,11 @@
+
+github-stats
+
+query github API to get stats
+
+
+See the following references:
+
+http://developer.github.com/v3/
+
+http://search.cpan.org/~fayland/Net-GitHub/lib/Net/GitHub.pm
