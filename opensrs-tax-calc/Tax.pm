@@ -1,8 +1,10 @@
 # 
 #-------------------------------------------------------------------------
-# Author: Mike <@users.sourceforge.net>
+# Author: Mike <mike-src@users.sourceforge.net>
 #
-# Based on Util.pm
+# Last modified: 2003/03/18
+#
+# File header based on Util.pm
 #  Developed by VPOP Technologies, Inc. <admin@vpop.net>
 #  Author: Paul Sisson <psisson@users.sourceforge.net>
 #-------------------------------------------------------------------------
@@ -62,7 +64,17 @@ sub new {
 	%CONFIG = %{$args{config}};
 
 	bless $self, $class;
+
+	$self->init();
+
 	return $self;
+}
+
+sub init {
+    my($ob) = @_;
+
+    $ob->{debug}=0;
+
 }
 
 #=======================================================================
@@ -76,8 +88,12 @@ sub taxtable_prop {
 
     my($v,$v1,$v2);
 
-    $v1 = $CONFIG{uc $country}{$prop};
-    $v2 = $CONFIG{uc $country}{uc $state}{$prop};
+    $v1 = $CONFIG{taxtable}{uc $country}{$prop};
+    $v2 = $CONFIG{taxtable}{uc $country}{uc $state}{$prop};
+
+    if ($ob->{debug}) {
+	printf(STDERR "taxtable %s %s [%s] [%s]\n",$country,$state,$v1,$v2);
+    }
 
     if ($v2 eq "") {
 	$v=$v1;
@@ -164,14 +180,14 @@ sub get_order_total {
     my($taxr1,$taxr2,$tm2,$tax1,$tax2,$total,$subtotal);
     my($tax1name,$tax2name);
 
-    $taxr1 = $ob->tax_rate1($country,$state);
-    $taxr2 = $ob->tax_rate2($country,$state);
-    $tm2 = $ob->tax_mode2($country,$state);
+    $taxr1 = $ob->tax1_rate($country,$state);
+    $taxr2 = $ob->tax2_rate($country,$state);
+    $tm2 = $ob->tax2_mode($country,$state);
 
-    $tax1name = $ob->tax_name1($country,$state);
-    $tax2name = $ob->tax_name2($country,$state);
+    $tax1name = $ob->tax1_name($country,$state);
+    $tax2name = $ob->tax2_name($country,$state);
 
-    $subtotal    = sprintf "%.2f", ($item_cost * $num_items);
+    $subtotal    = fixcalc($item_cost * $num_items);
     $tax1 = $taxr1 ? $ob->get_tax($subtotal,$taxr1) : 0;
     if ($tm2==1) {
 	$tax2 = $taxr2 ? $ob->get_tax($subtotal,$taxr2) : 0;
@@ -179,7 +195,7 @@ sub get_order_total {
 	$tax2 = $taxr2 ? $ob->get_tax($subtotal+$tax1,$taxr2) : 0;
     }
 
-    $total       = sprintf("%.2f", $subtotal+$tax1+$tax2);
+    $total       = fixcalc($subtotal+$tax1+$tax2);
 
     return { tax1   => $tax1,
              tax2 => $tax2,
@@ -189,6 +205,55 @@ sub get_order_total {
              total       => $total,
            };
 }
+
+# calculate the tax on the subtotal of a sale.
+# this is the routine that you would normally call from 
+# your application to do all the work
+# the results are returned as a pointer to a hash.
+sub calc_tax {
+    my($ob,$amount,$country,$state) = @_;
+
+    my($taxr1,$taxr2,$tm2,$tax1,$tax2,$total,$subtotal);
+    my($tax1name,$tax2name);
+
+    $taxr1 = $ob->tax1_rate($country,$state);
+    $taxr2 = $ob->tax2_rate($country,$state);
+    $tm2 = $ob->tax2_mode($country,$state);
+
+    $tax1name = $ob->tax1_name($country,$state);
+    $tax2name = $ob->tax2_name($country,$state);
+
+    $subtotal    = fixcalc($amount);
+    $tax1 = $taxr1 ? $ob->get_tax($subtotal,$taxr1) : 0;
+    if ($tm2==1) {
+	$tax2 = $taxr2 ? $ob->get_tax($subtotal,$taxr2) : 0;
+    } elsif ($tm2==2) {
+	$tax2 = $taxr2 ? $ob->get_tax($subtotal+$tax1,$taxr2) : 0;
+    }
+
+    $total       = fixcalc($subtotal+$tax1+$tax2);
+
+    if ($ob->{debug}) {
+	printf(STDERR "calc_tax %s %s %s\n",$tax1,$tax2,$total);
+    }
+
+    return { tax1 => $tax1,
+             tax2 => $tax2,
+             tax1name => $tax1name,
+             tax2name => $tax2name,
+             subtotal       => $subtotal,
+             total       => $total,
+           };
+}
+
+
+# round floating point values to 2 decimal places.
+sub fixcalc {
+    my($v) = @_;
+
+    return sprintf("%.2f",$v);
+}
+
 
 #=======================================================================
 # get_tax() - 
@@ -233,6 +298,8 @@ will display appropriately for each state/province when printed.
 
 It is the responsibility of the user to verify that they have the
 correct tax rates defined in the table.
+
+The country and states are typically defined using the 2 letter codes.
 
 =cut
 

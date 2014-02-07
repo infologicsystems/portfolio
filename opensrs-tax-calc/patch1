@@ -1,0 +1,33 @@
+*** templates/domain/renew/confirm.html.orig	Thu Aug 29 14:54:12 2002
+--- templates/domain/renew/confirm.html	Tue Mar 18 20:57:19 2003
+***************
+*** 140,153 ****
+  
+  {{IF NAME="state_tax"}}
+  <tr>
+! <td align=right nowrap><span class=sans>State Tax:</span>&nbsp;</td>
+  <td align=right nowrap><span class=sans>{{state_tax}}&nbsp;</td>
+  </tr>
+  {{/IF}}
+  
+  {{IF NAME="country_tax"}}
+  <tr>
+! <td align=right nowrap><span class=sans>Country Tax:</span>&nbsp;</td>
+  <td align=right nowrap><span class=sans>{{country_tax}}&nbsp;</td>
+  </tr>
+  {{/IF}}
+--- 140,153 ----
+  
+  {{IF NAME="state_tax"}}
+  <tr>
+! <td align=right nowrap><span class=sans>{{tax1name}}:</span>&nbsp;</td>
+  <td align=right nowrap><span class=sans>{{state_tax}}&nbsp;</td>
+  </tr>
+  {{/IF}}
+  
+  {{IF NAME="country_tax"}}
+  <tr>
+! <td align=right nowrap><span class=sans>{{tax2name}}:</span>&nbsp;</td>
+  <td align=right nowrap><span class=sans>{{country_tax}}&nbsp;</td>
+  </tr>
+  {{/IF}}

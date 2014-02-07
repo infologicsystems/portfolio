@@ -1,0 +1,20 @@
+
+This document describes the steps necessary to integrate the
+Tax.pm module into the opensrs-sf code.
+This was developed with version 2.14
+
+This is not a complete set of instructions.
+It is meant for developers.
+
+The file Tax.pm is placed in lib/Payment
+
+The file patch1 shows an example of how to modify the templates
+to display the tax name variables. This particular patch is for
+soe of the domain/renew templates.
+
+The file patch2 shows how to modify the cgi programs to make use
+of the new module. This particular patch is for the renew.cgi program.
+
+taxtable.conf should be placed in the etc directory.
+Add the following to local.conf to include it.
+<<include taxtable.conf>>

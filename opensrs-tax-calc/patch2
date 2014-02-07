@@ -1,0 +1,89 @@
+*** renew.cgi.orig	Mon Mar 17 21:37:13 2003
+--- renew.cgi	Tue Mar 18 20:52:01 2003
+***************
+*** 76,81 ****
+--- 76,82 ----
+  use Session::Log;
+  use Template::Parser;
+  use Util::Codec;
++ use Payment::Tax;
+  
+  use locale;
+  use strict;
+***************
+*** 934,945 ****
+      my %html = %in;
+      my $bc   = $in{billing_country} || $SESSION{billing_country};
+      my $bs   = $in{billing_state}   || $SESSION{billing_state};
+- 	my $ctax = $CONFIG{country_tax}{uc $bc}  || 0;
+- 	my $stax = $CONFIG{state_tax}{uc $bs}    || 0;
+      my $sub  = $NUMBER->as_float(0);
+  
+      my @domains = ($AUTH->get('domain'));
+  
+      try {
+          $obj = new Domain::Order::Cost( type   => $in{reg_type},
+                                          config => \%CONFIG,
+--- 935,950 ----
+      my %html = %in;
+      my $bc   = $in{billing_country} || $SESSION{billing_country};
+      my $bs   = $in{billing_state}   || $SESSION{billing_state};
+      my $sub  = $NUMBER->as_float(0);
++     my($tax1);
+  
+      my @domains = ($AUTH->get('domain'));
+  
++ 
++     $tax1 = new Payment::Tax(
++                              config => \%CONFIG,
++                             );
++ 
+      try {
+          $obj = new Domain::Order::Cost( type   => $in{reg_type},
+                                          config => \%CONFIG,
+***************
+*** 953,958 ****
+--- 958,966 ----
+          errexit($es);
+      };
+  
++ 	my $ctax = $tax1->tax2_rate($bc,$bs);
++ 	my $stax = $tax1->tax1_rate($bc,$bs);
++ 
+      ## keep this loop in case we can offer multiple renewals
+      ## at once at some future point
+  
+***************
+*** 973,985 ****
+      }
+  
+      my $subtotal    = $NUMBER->as_float($sub);
+! 	my $state_tax   = $obj->tax($subtotal, $stax);
+! 	my $country_tax = $obj->tax($subtotal, $ctax);
+  	my $total       = $NUMBER->as_currency($subtotal + $state_tax 
+                                                       + $country_tax);
+  
+      $html{subtotal}    = $subtotal;
+      $html{state_tax}   = $state_tax   if $stax;
+      $html{country_tax} = $country_tax if $ctax;
+      $html{total}       = encode_entities($total);
+      $html{summary}     = \@rows if @rows;
+--- 981,998 ----
+      }
+  
+      my $subtotal    = $NUMBER->as_float($sub);
+!     my $taxes = $tax1->calc_tax($subtotal,uc $bc,uc $bs);
+! #	my $state_tax   = $obj->tax($subtotal, $stax);
+! #	my $country_tax = $obj->tax($subtotal, $ctax);
+! 	my $state_tax   = $taxes->{tax1};
+! 	my $country_tax = $taxes->{tax2};
+  	my $total       = $NUMBER->as_currency($subtotal + $state_tax 
+                                                       + $country_tax);
+  
+      $html{subtotal}    = $subtotal;
+      $html{state_tax}   = $state_tax   if $stax;
++     $html{tax1name}   = $taxes->{tax1name};
++     $html{tax2name}   = $taxes->{tax2name};
+      $html{country_tax} = $country_tax if $ctax;
+      $html{total}       = encode_entities($total);
+      $html{summary}     = \@rows if @rows;
